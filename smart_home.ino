@@ -31,7 +31,7 @@ bool isWindowOpen = false;
 float currentPWM = 0; 
 
 // 제어 신호 버퍼
-const int BUFFER_MAX = 5; 
+const int BUFFER_MAX = 1; 
 int cntHeat = 0;
 int cntHum = 0;
 int cntAir = 0;
@@ -335,38 +335,41 @@ void runControlLogic() {
 }
 
 void controlDevice(int minT, int maxT, int minH, int maxH, int maxCO2) {
-  if (curTemp < minT) cntHeat++;
-  else if (curTemp > maxT) cntHeat--;
-  cntHeat = constrain(cntHeat, 0, BUFFER_MAX);
-  if (cntHeat >= BUFFER_MAX) digitalWrite(HEAT_PIN, HIGH);
-  else if (cntHeat <= 0) digitalWrite(HEAT_PIN, LOW);
+  // [1] 온도 제어 (히터) - 즉시 반응
+  if (curTemp < minT) {
+    digitalWrite(HEAT_PIN, HIGH);
+  } 
+  else if (curTemp > maxT) {
+    digitalWrite(HEAT_PIN, LOW);
+  }
 
-  if (curHum < minH) cntHum++;
-  else if (curHum > maxH) cntHum--;
-  cntHum = constrain(cntHum, 0, BUFFER_MAX);
-  if (cntHum >= BUFFER_MAX) digitalWrite(HUM_PIN, HIGH);
-  else if (cntHum <= 0) digitalWrite(HUM_PIN, LOW);
+  // [2] 습도 제어 (가습기) - 즉시 반응
+  if (curHum < minH) {
+    digitalWrite(HUM_PIN, HIGH);
+  } 
+  else if (curHum > maxH) {
+    digitalWrite(HUM_PIN, LOW);
+  }
 
-  if (curCO2 > maxCO2) cntAir++;
-  else if (curCO2 < (maxCO2 - 200)) cntAir--;
-  cntAir = constrain(cntAir, 0, BUFFER_MAX);
-
-  if (cntAir >= BUFFER_MAX) {
+  // [3] 공기질 제어 (창문 & 팬) - 즉시 반응
+  // CO2가 기준치보다 높으면 환기 시작
+  if (curCO2 > maxCO2) {
      if (!isWindowOpen) {
        setWindowAngle(90); 
-       delay(500); 
+       delay(500); // 창문 열리는 시간 대기
        digitalWrite(FAN_PIN, HIGH);
        isWindowOpen = true;
-       Serial.println(">> [AUTO] Ventilation ON");
+       Serial.println(">> [AUTO] 환기 시작 (CO2 초과)");
      }
   } 
-  else if (cntAir <= 0) {
+  // CO2가 충분히 낮아지면 환기 종료 (기준치 - 200)
+  else if (curCO2 < (maxCO2 - 200)) {
      if (isWindowOpen) {
        digitalWrite(FAN_PIN, LOW); 
-       delay(500); 
+       delay(500); // 팬 멈추는 시간 대기
        setWindowAngle(0);
        isWindowOpen = false;
-       Serial.println(">> [AUTO] Ventilation OFF");
+       Serial.println(">> [AUTO] 환기 종료 (CO2 정상)");
      }
   }
 }
